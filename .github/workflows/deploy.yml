@@ -23,7 +23,7 @@ jobs:
       run: cd is_enzo_lost && dart pub get
 
     - name: Build static site
-      run: cd is_enzo_lost && dart pub global run jaspr_cli build
+      run: cd is_enzo_lost && jaspr build
 
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
