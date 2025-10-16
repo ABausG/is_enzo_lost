@@ -12,6 +12,7 @@ void main() {
   runApp(
     Document(
       title: 'Is Enzo Lost?',
+      base: 'is_enzo_lost',
       styles: [
         css.import('https://fonts.googleapis.com/css?family=Inter:wght@400;500;600;700;900'),
         css('html, body').styles(

@@ -28,7 +28,7 @@ jobs:
     - name: Upload artifact
       uses: actions/upload-pages-artifact@v3
       with:
-        path: './is_enzo_lost/build/'
+        path: './is_enzo_lost/build/jaspr'
 
   deploy:
     needs: build
