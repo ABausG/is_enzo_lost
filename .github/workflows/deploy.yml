@@ -1,0 +1,46 @@
+name: Deploy Jaspr Site
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Dart
+      uses: dart-lang/setup-dart@v1
+      with:
+        sdk: '3.8.0'
+
+    - name: Install Jaspr CLI
+      run: dart pub global activate jaspr_cli
+
+    - name: Install dependencies
+      run: cd is_enzo_lost && dart pub get
+
+    - name: Build static site
+      run: cd is_enzo_lost && dart pub global run jaspr_cli build
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: './is_enzo_lost/build/'
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
