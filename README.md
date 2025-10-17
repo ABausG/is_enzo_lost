@@ -30,6 +30,7 @@ Example:
     "source": "https://x.com/EnzoConty/status/1978851008911466676",
     "timestamp": "2025-10-16T15:50:00.000Z"
 }
+```
 
 ## Disclaimer
 
