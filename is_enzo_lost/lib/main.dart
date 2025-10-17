@@ -24,7 +24,7 @@ void main() {
         ),
       ],
       head: [
-        script(defer: true, src: 'main.dart.js'),
+        script(async: true, src: 'https://platform.twitter.com/widgets.js', attributes: {'charset': 'utf-8'})
       ],
       body: App(),
     ),
