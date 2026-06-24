@@ -1,5 +1,10 @@
 [
   {
+    "isLost": true,
+    "source": "https://x.com/EnzoConty/status/2069636559494623647?s=20",
+    "timestamp": "2026-06-24T09:01:00.000Z"
+  },
+  {
     "isLost": false,
     "source": "https://x.com/sssecki/status/2046953766402789761?s=46&t=bipW3UcjDwKX9y5GKhdfBA",
     "timestamp": "2026-04-22T16:04:00.000Z"
