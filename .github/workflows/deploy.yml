@@ -17,7 +17,7 @@ jobs:
         sdk: '3.8.0'
 
     - name: Install Jaspr CLI
-      run: dart pub global activate jaspr_cli
+      run: dart pub global activate jaspr_cli 0.21.7
 
     - name: Install dependencies
       run: cd is_enzo_lost && dart pub get

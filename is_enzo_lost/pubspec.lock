@@ -89,14 +89,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.0.4"
-  build_modules:
-    dependency: transitive
-    description:
-      name: build_modules
-      sha256: "0126ba5111c4b8f5b1f557beb23eb0bd9266f9114199ff42d9270c29c997b1be"
-      url: "https://pub.dev"
-    source: hosted
-    version: "5.0.18"
   build_runner:
     dependency: "direct dev"
     description:
@@ -109,10 +101,10 @@ packages:
     dependency: "direct dev"
     description:
       name: build_web_compilers
-      sha256: e93b5d5af529269f52b691f7542d859fba82982cadec23b19680c15c70f65378
+      sha256: c8be4b48f09289d145c7eaa3240f1e7776c529ea1cecddf483218edd3129de3f
       url: "https://pub.dev"
     source: hosted
-    version: "4.3.0"
+    version: "4.8.0"
   built_collection:
     dependency: transitive
     description:
@@ -485,10 +477,10 @@ packages:
     dependency: transitive
     description:
       name: scratch_space
-      sha256: efe807ddf27b148b500465957ceee4255deb4a8558575530b6398840436300ce
+      sha256: "55f141cf286eca871f739518b689af61cb994d671f3fd8efabd63aba7578c309"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.1"
+    version: "1.2.2"
   shelf:
     dependency: transitive
     description:
@@ -682,4 +674,4 @@ packages:
     source: hosted
     version: "3.1.3"
 sdks:
-  dart: ">=3.8.0 <3.11.0-z"
+  dart: ">=3.8.0 <3.13.0-z"
