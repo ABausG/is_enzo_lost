@@ -76,11 +76,11 @@ jobs:
           git commit -m "Add status entry from issue #${ISSUE_NUMBER}"
           git push origin "$BRANCH"
           BODY_FILE=$(mktemp)
-          cat > "$BODY_FILE" <<EOF
-Closes #${ISSUE_NUMBER}
-
-Automated status update from the [status update issue template](https://github.com/${{ github.repository }}/issues/${ISSUE_NUMBER}).
-EOF
+          {
+            echo "Closes #${ISSUE_NUMBER}"
+            echo ""
+            echo "Automated status update from the [status update issue template](https://github.com/${{ github.repository }}/issues/${ISSUE_NUMBER})."
+          } > "$BODY_FILE"
           PR_URL=$(gh pr create \
             --title "Add status entry from issue #${ISSUE_NUMBER}" \
             --body-file "$BODY_FILE" \
