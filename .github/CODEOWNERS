@@ -1,0 +1,5 @@
+# Default fallback owner for the whole repo.
+* @ABausG
+
+# Status updates require review from maintainers before auto-merge.
+status.json @ABausG @esrakadah @S-ecki @BLKKKBVSIK @dumazy

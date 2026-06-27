@@ -1,0 +1,122 @@
+name: Status Update
+
+on:
+  issues:
+    types: [opened, labeled]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: status-update-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  create-pr:
+    if: github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'status-update')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip if PR already exists
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          EXISTING=$(gh pr list --state open --search "Add status entry from issue #${ISSUE_NUMBER}" --json number --jq 'length')
+          if [ "$EXISTING" != "0" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Open PR already exists for issue #${ISSUE_NUMBER}"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.skip != 'true'
+
+      - name: Setup Dart
+        if: steps.check.outputs.skip != 'true'
+        uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.8.0'
+
+      - name: Update status.json
+        if: steps.check.outputs.skip != 'true'
+        id: update
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          printf '%s' "$ISSUE_BODY" > /tmp/issue-body.md
+          cd is_enzo_lost
+          dart pub get
+          dart run bin/process_status_issue.dart /tmp/issue-body.md "$ISSUE_NUMBER" ../status.json /tmp/status-preview.md
+          if git diff --quiet ../status.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to status.json (entry may already exist)."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create pull request
+        if: steps.check.outputs.skip != 'true' && steps.update.outputs.changed == 'true'
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          BRANCH="status-update/${ISSUE_NUMBER}-${{ github.run_number }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add status.json
+          git commit -m "Add status entry from issue #${ISSUE_NUMBER}"
+          git push origin "$BRANCH"
+          BODY_FILE=$(mktemp)
+          cat > "$BODY_FILE" <<EOF
+Closes #${ISSUE_NUMBER}
+
+Automated status update from the [status update issue template](https://github.com/${{ github.repository }}/issues/${ISSUE_NUMBER}).
+EOF
+          PR_URL=$(gh pr create \
+            --title "Add status entry from issue #${ISSUE_NUMBER}" \
+            --body-file "$BODY_FILE" \
+            --head "$BRANCH" \
+            --base main)
+          echo "url=${PR_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Post preview comment
+        if: steps.check.outputs.skip != 'true' && steps.update.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+          PR_URL="${{ steps.create-pr.outputs.url }}"
+          cd is_enzo_lost
+          dart run bin/process_status_issue.dart format-preview /tmp/status-preview.entry.json "$PR_URL" > /tmp/status-preview-final.md
+          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]") | .body | select(test("## Status preview"))] | length')
+          if [ "$EXISTING" = "0" ]; then
+            gh issue comment "$ISSUE_NUMBER" --body-file /tmp/status-preview-final.md
+          else
+            echo "Preview comment already exists, skipping."
+          fi
+
+  enable-auto-merge:
+    if: |
+      github.event_name == 'pull_request_review' &&
+      github.event.review.state == 'approved' &&
+      startsWith(github.event.pull_request.head.ref, 'status-update/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge after maintainer approval
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          gh pr merge "$PR_NUMBER" --auto --squash || echo "Auto-merge could not be enabled."

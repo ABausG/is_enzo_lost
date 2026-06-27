@@ -1,0 +1,37 @@
+name: Status Update
+description: Report a new status update for Enzo
+title: "[Status] "
+labels:
+  - status-update
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Submit a new status update. A pull request will be opened automatically for review.
+  - type: dropdown
+    id: is-lost
+    attributes:
+      label: Is Enzo lost*
+      description: Current status based on the linked source
+      options:
+        - "Yes"
+        - "No"
+        - "Maybe"
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Source
+      description: Link to the source (e.g. tweet, post, photo)
+      placeholder: https://x.com/...
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Optional context shown on the site (e.g. last seen location, event details)
+      placeholder: Last seen in France, heading to the airport...
+    validations:
+      required: false
