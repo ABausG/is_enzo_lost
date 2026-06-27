@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 import 'package:jaspr/jaspr.dart';
-import '../status_service.dart';
+import '../source_url.dart';
+import '../status_entry.dart';
 
 class Home extends StatelessComponent {
   final StatusEntry status;
@@ -9,7 +10,6 @@ class Home extends StatelessComponent {
 
   @override
   Component build(BuildContext context) {
-    final isLost = status.isLost;
     return div(classes: 'page-container', [
       div(classes: 'main-content', [
         h2([
@@ -17,23 +17,23 @@ class Home extends StatelessComponent {
           a(href: 'https://x.com/enzoconty', [text('Enzo')]),
           text(' lost?'),
         ]),
-        h1([
-          text(
-            isLost == null
-                ? 'MAYBE 🤔'
-                : isLost
-                ? 'YES 😱'
-                : 'NO 🎉',
-          ),
-        ]),
+        h1([text(statusDisplay(status.isLost))]),
         p([
           text('Last update: '),
           a(href: status.source, target: Target.blank, [
             text(DateFormat.yMd().add_Hm().format(status.timestamp)),
           ]),
-          if (status.source.contains('x.com') || status.source.contains('twitter.com'))
+          if (status.description != null) ...[
+            br(),
+            text(status.description!),
+          ],
+          if (parseXStatusUrl(status.source) case final xStatus?)
             blockquote(classes: 'twitter-tweet', [
-              a(href: status.source.replaceFirst('x.com', 'twitter.com'), []),
+              a(
+                href:
+                    'https://twitter.com/${xStatus.username}/status/${xStatus.tweetId}',
+                [],
+              ),
             ]),
         ]),
       ]),

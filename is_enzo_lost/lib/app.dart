@@ -1,6 +1,7 @@
 import 'package:jaspr/jaspr.dart';
 
 import 'pages/home.dart';
+import 'status_entry.dart';
 import 'status_service.dart';
 
 class App extends StatefulComponent {
