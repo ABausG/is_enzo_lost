@@ -54,8 +54,9 @@ List<StatusEntry> decodeStatusEntries(String source) {
 }
 
 String encodeStatusEntries(List<StatusEntry> entries) {
-  final encoded = StatusEntryMapper.ensureInitialized().encodeJson<List<StatusEntry>>(
-    entries,
-  );
-  return '${const JsonEncoder.withIndent('  ').convert(jsonDecode(encoded))}\n';
+  final mapper = StatusEntryMapper.ensureInitialized();
+  final list = entries
+      .map((entry) => jsonDecode(mapper.encodeJson<StatusEntry>(entry)))
+      .toList();
+  return '${const JsonEncoder.withIndent('  ').convert(list)}\n';
 }
