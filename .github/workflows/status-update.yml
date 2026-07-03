@@ -98,8 +98,11 @@ jobs:
 
           cd is_enzo_lost
           dart run bin/process_status_issue.dart format-preview /tmp/status-preview.entry.json "$PR_URL" > /tmp/status-preview-final.md
-          EXISTING=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]") | .body | select(test("## Status preview"))] | length')
-          if [ "$EXISTING" = "0" ]; then
+          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]") | select(.body | test("## Status preview"))] | .[0].id // empty')
+          if [ -n "$COMMENT_ID" ]; then
+            jq -n --rawfile body /tmp/status-preview-final.md '{body: $body}' | \
+              gh api --method PATCH "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" --input -
+          else
             gh issue comment "$ISSUE_NUMBER" --body-file /tmp/status-preview-final.md
           fi
