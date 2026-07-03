@@ -19,26 +19,9 @@ concurrency:
 
 jobs:
   create-pr:
-    if: |
-      github.event_name == 'issues' && (
-        contains(github.event.issue.labels.*.name, 'status-update') ||
-        startsWith(github.event.issue.title, '[Status]')
-      )
+    if: github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'status-update')
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure status-update label exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh label create status-update \
-            --description "Automated status update submission" \
-            --color "0E8A16" 2>/dev/null || true
-          if ! gh issue view "${{ github.event.issue.number }}" --json labels \
-            --jq '.labels[].name' | grep -qx status-update; then
-            gh issue edit "${{ github.event.issue.number }}" --add-label status-update
-          fi
-
       - name: Check for existing pull request
         id: check
         env:
