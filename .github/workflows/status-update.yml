@@ -3,10 +3,6 @@ name: Status Update
 on:
   issues:
     types: [opened, labeled]
-  pull_request:
-    types: [opened]
-  pull_request_review:
-    types: [submitted]
 
 permissions:
   contents: write
@@ -14,16 +10,16 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: status-update-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: status-update-${{ github.event.issue.number }}
   cancel-in-progress: false
 
 jobs:
-  create-pr:
-    if: github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'status-update')
+  process-issue:
+    if: contains(github.event.issue.labels.*.name, 'status-update')
     runs-on: ubuntu-latest
     steps:
-      - name: Check for existing pull request
-        id: check
+      - name: Find existing pull request
+        id: existing-pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -31,10 +27,8 @@ jobs:
           ISSUE_NUMBER="${{ github.event.issue.number }}"
           PR_JSON=$(gh pr list --state open --search "Add status entry from issue #${ISSUE_NUMBER}" --json url,number --jq '.[0] // empty')
           if [ -n "$PR_JSON" ]; then
-            echo "pr_exists=true" >> "$GITHUB_OUTPUT"
             echo "url=$(echo "$PR_JSON" | jq -r .url)" >> "$GITHUB_OUTPUT"
             echo "number=$(echo "$PR_JSON" | jq -r .number)" >> "$GITHUB_OUTPUT"
-            echo "Open PR already exists for issue #${ISSUE_NUMBER}"
           fi
 
       - uses: actions/checkout@v4
@@ -56,13 +50,12 @@ jobs:
           dart run bin/process_status_issue.dart /tmp/issue-body.md "$ISSUE_NUMBER" ../status.json /tmp/status-preview.md
           if git diff --quiet ../status.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No changes to status.json (entry may already exist)."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create pull request
-        if: steps.check.outputs.pr_exists != 'true' && steps.update.outputs.changed == 'true'
+        if: steps.existing-pr.outputs.url == '' && steps.update.outputs.changed == 'true'
         id: create-pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,76 +81,25 @@ jobs:
             --head "$BRANCH" \
             --base main)
           echo "url=${PR_URL}" >> "$GITHUB_OUTPUT"
-          PR_NUMBER=$(gh pr view "$PR_URL" --json number --jq .number)
-          echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "number=$(gh pr view "$PR_URL" --json number --jq .number)" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve pull request
-        id: pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PR_URL="${{ steps.create-pr.outputs.url || steps.check.outputs.url }}"
-          PR_NUMBER="${{ steps.create-pr.outputs.number || steps.check.outputs.number }}"
-          if [ -z "$PR_URL" ]; then
-            echo "No pull request available for this issue."
-            exit 0
-          fi
-          echo "url=${PR_URL}" >> "$GITHUB_OUTPUT"
-          echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-
-      - name: Enable auto-merge
-        if: steps.pr.outputs.url != ''
+      - name: Finalize pull request
+        if: steps.existing-pr.outputs.url != '' || steps.create-pr.outputs.url != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PR_URL: ${{ steps.create-pr.outputs.url || steps.existing-pr.outputs.url }}
+          PR_NUMBER: ${{ steps.create-pr.outputs.number || steps.existing-pr.outputs.number }}
         run: |
-          PR_NUMBER="${{ steps.pr.outputs.number }}"
-          if gh pr view "$PR_NUMBER" --json isInMergeQueue,autoMergeRequest \
-            --jq '(.isInMergeQueue // false) or (.autoMergeRequest != null)'; then
-            echo "Auto-merge already enabled for PR #${PR_NUMBER}."
-            exit 0
+          if ! gh pr view "$PR_NUMBER" --json autoMergeRequest --jq '.autoMergeRequest != null'; then
+            gh pr merge "$PR_NUMBER" --auto --squash
           fi
-          gh pr merge "$PR_NUMBER" --auto --squash
 
-      - name: Post preview comment
-        if: steps.pr.outputs.url != ''
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          PR_URL="${{ steps.pr.outputs.url }}"
           cd is_enzo_lost
           dart run bin/process_status_issue.dart format-preview /tmp/status-preview.entry.json "$PR_URL" > /tmp/status-preview-final.md
           EXISTING=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
             --jq '[.[] | select(.user.login == "github-actions[bot]") | .body | select(test("## Status preview"))] | length')
           if [ "$EXISTING" = "0" ]; then
             gh issue comment "$ISSUE_NUMBER" --body-file /tmp/status-preview-final.md
-          else
-            echo "Preview comment already exists, skipping."
           fi
-
-  enable-auto-merge:
-    if: |
-      (
-        github.event_name == 'pull_request' &&
-        startsWith(github.event.pull_request.head.ref, 'status-update/')
-      ) || (
-        github.event_name == 'pull_request_review' &&
-        github.event.review.state == 'approved' &&
-        startsWith(github.event.pull_request.head.ref, 'status-update/')
-      )
-    runs-on: ubuntu-latest
-    steps:
-      - name: Enable auto-merge for status update pull request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          if gh pr view "$PR_NUMBER" --json isInMergeQueue,autoMergeRequest \
-            --jq '(.isInMergeQueue // false) or (.autoMergeRequest != null)'; then
-            echo "Auto-merge already enabled for PR #${PR_NUMBER}."
-            exit 0
-          fi
-          gh pr merge "$PR_NUMBER" --auto --squash
