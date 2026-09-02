@@ -3,6 +3,11 @@ name: Deploy Jaspr Site
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
 
 jobs:
   build:
