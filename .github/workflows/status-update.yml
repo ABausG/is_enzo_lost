@@ -2,7 +2,7 @@ name: Status Update
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened, edited, labeled]
 
 permissions:
   contents: write
@@ -15,23 +15,43 @@ concurrency:
 
 jobs:
   process-issue:
-    if: contains(github.event.issue.labels.*.name, 'status-update')
+    # One PR per issue: the branch name is derived from the issue number alone, so
+    # editing the issue body force-pushes that branch and updates the open PR in
+    # place. Closed issues never get a PR (re)created.
+    if: >-
+      github.event.issue.state == 'open' &&
+      !github.event.issue.pull_request &&
+      contains(github.event.issue.labels.*.name, 'status-update') &&
+      (github.event.action != 'edited' || github.event.changes.body != null)
     runs-on: ubuntu-latest
+    env:
+      # A PAT is required so the eventual merge is attributed to a real user and
+      # therefore triggers the deploy workflow. Falls back to GITHUB_TOKEN.
+      GH_TOKEN: ${{ secrets.STATUS_BOT_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      BRANCH: status-update/${{ github.event.issue.number }}
     steps:
+      - name: Warn if deploy token is missing
+        env:
+          HAS_TOKEN: ${{ secrets.STATUS_BOT_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::warning::STATUS_BOT_TOKEN is not set; merging this PR will not trigger the deploy workflow."
+          fi
+
       - name: Find existing pull request
         id: existing-pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
         run: |
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          PR_JSON=$(gh pr list --state open --search "Add status entry from issue #${ISSUE_NUMBER}" --json url,number --jq '.[0] // empty')
+          PR_JSON=$(gh pr list --head "$BRANCH" --state open --json url,number --jq '.[0] // empty')
           if [ -n "$PR_JSON" ]; then
             echo "url=$(echo "$PR_JSON" | jq -r .url)" >> "$GITHUB_OUTPUT"
             echo "number=$(echo "$PR_JSON" | jq -r .number)" >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.STATUS_BOT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Setup Dart
         uses: dart-lang/setup-dart@v1
@@ -42,7 +62,6 @@ jobs:
         id: update
         env:
           ISSUE_BODY: ${{ github.event.issue.body }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           printf '%s' "$ISSUE_BODY" > /tmp/issue-body.md
           cd is_enzo_lost
@@ -54,26 +73,25 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create pull request
-        if: steps.existing-pr.outputs.url == '' && steps.update.outputs.changed == 'true'
-        id: create-pr
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
+      - name: Push status branch
+        if: steps.update.outputs.changed == 'true'
         run: |
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          BRANCH="status-update/${ISSUE_NUMBER}-${{ github.run_number }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add status.json
           git commit -m "Add status entry from issue #${ISSUE_NUMBER}"
-          git push origin "$BRANCH"
+          git push --force origin "$BRANCH"
+
+      - name: Create pull request
+        if: steps.existing-pr.outputs.url == '' && steps.update.outputs.changed == 'true'
+        id: create-pr
+        run: |
           BODY_FILE=$(mktemp)
           {
             echo "Closes #${ISSUE_NUMBER}"
             echo ""
-            echo "Automated status update from the [status update issue template](https://github.com/${{ github.repository }}/issues/${ISSUE_NUMBER})."
+            echo "Automated status update from the [status update issue template](https://github.com/${GH_REPO}/issues/${ISSUE_NUMBER})."
           } > "$BODY_FILE"
           PR_URL=$(gh pr create \
             --title "Add status entry from issue #${ISSUE_NUMBER}" \
@@ -86,9 +104,6 @@ jobs:
       - name: Finalize pull request
         if: steps.existing-pr.outputs.url != '' || steps.create-pr.outputs.url != ''
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
           PR_URL: ${{ steps.create-pr.outputs.url || steps.existing-pr.outputs.url }}
           PR_NUMBER: ${{ steps.create-pr.outputs.number || steps.existing-pr.outputs.number }}
         run: |
@@ -98,11 +113,11 @@ jobs:
 
           cd is_enzo_lost
           dart run bin/process_status_issue.dart format-preview /tmp/status-preview.entry.json "$PR_URL" > /tmp/status-preview-final.md
-          COMMENT_ID=$(gh api "repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]") | select(.body | test("## Status preview"))] | .[0].id // empty')
+          COMMENT_ID=$(gh api "repos/${GH_REPO}/issues/${ISSUE_NUMBER}/comments" \
+            --jq '[.[] | select(.body | test("## Status preview"))] | .[0].id // empty')
           if [ -n "$COMMENT_ID" ]; then
             jq -n --rawfile body /tmp/status-preview-final.md '{body: $body}' | \
-              gh api --method PATCH "repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" --input -
+              gh api --method PATCH "repos/${GH_REPO}/issues/comments/${COMMENT_ID}" --input -
           else
             gh issue comment "$ISSUE_NUMBER" --body-file /tmp/status-preview-final.md
           fi
